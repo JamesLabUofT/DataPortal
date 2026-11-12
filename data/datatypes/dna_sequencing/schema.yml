@@ -1,0 +1,63 @@
+# data/datatypes/dna_sequencing/schema.yml
+# A NON-PLOT data type: each row carries its own coordinates.
+# (A schema maps EITHER `plot` OR `lat`/`lon`, never both.)
+schema_version: 1
+
+id: dna_sequencing
+name: DNA sequencing
+description: >
+  Sequencing of DNA data.
+  One row per FASTQ file.
+files: "*.csv"
+
+shared:
+  datapoint_name: Fastq ID
+  lat: Latitude
+  lon: Longitude
+  site: Site
+  date: Year                     # year-only dates are fine
+  project_id: Project ID(s)
+
+columns:
+  Original sample ID:
+    type: text
+    filter: search
+  Source:
+    type: category
+    filter: multiselect
+  Sequencer:
+    type: category
+    filter: multiselect
+  Plate ID:
+    type: category
+    filter: select
+  Sex:
+    type: category
+    values: [F, M, unknown]      # anything else fails the build
+    filter: multiselect
+  Sample status:
+    type: category
+    values: [sequenced, failed, resequence]
+    filter: multiselect
+  Fastq tarball:
+    type: path
+    visibility: internal
+
+display:
+  table: [Fastq ID, Original sample ID, Site, Year, Sex, Sequencer, Sample status]
+  popup: "{{Fastq ID}} · {{Site}} · {{Year}}"
+
+access:
+  params:
+    dest_dir:
+      label: Destination folder on the server
+      type: text
+      default: ~/dna_pull
+    extract:
+      label: Extract tarballs after copying
+      type: checkbox
+      default: true
+  templates:
+    - label: R
+      file: template.R
+      language: r

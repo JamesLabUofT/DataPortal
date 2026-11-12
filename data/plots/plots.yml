@@ -1,0 +1,18 @@
+# data/plots/plots.yml
+# Describes plots.csv: the ONE place where plot coordinates are stored.
+# Data type and project CSVs refer to plots by "Plot name" only.
+schema_version: 1
+
+shared: # portal attribute → your column name (REQUIRED)
+  plot: Plot name
+  site: Site name
+  lat: Latitude
+  lon: Longitude
+
+columns: # optional; types and filters are inferred if omitted
+  Established:
+    type: number
+    description: Year the plot was first measured
+  Notes:
+    type: text
+    filter: none
