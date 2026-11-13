@@ -2,11 +2,9 @@ project:
   type: website
   pre-render: src/build.R
   resources:
-    - "_generated/datatypes/*"
-    - "_generated/project_links.csv"
-    - "_generated/projects_overview.csv"
-    - "_generated/**"      # folders starting with _ aren't copied to the site otherwise
-
+    - "_generated/**"
+    - "assets/portal.js"
+    
 metadata-files:
   - _generated/navbar.yml
 
