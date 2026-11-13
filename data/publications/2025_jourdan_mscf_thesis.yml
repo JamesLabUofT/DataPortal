@@ -1,4 +1,4 @@
 citation: "Jourdan, L. (2025). Using Synthetic and Empirical Terrestrial Lidar Data to Infer the Effects of Jack Pine Budworm on Forest Fuels in Ontario. MScF thesis."
 url: https://www.proquest.com/dissertations-theses/using-synthetic-empirical-terrestrial-lidar-data/docview/3276164160/se-2?accountid=14771
 projects: [jpbw]
-datatypes: [fuel_measurements, tls_lidar]
+datatypes: [tls_lidar]

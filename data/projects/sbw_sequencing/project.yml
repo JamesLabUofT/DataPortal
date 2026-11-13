@@ -1,6 +1,6 @@
 schema_version: 1
 
-id: sbw_genotype
-name: Spruce budworm genotype project
+id: sbw_sequencing
+name: Spruce budworm genotype sequencing project
 description: >
   Population genomics of spruce budworm across Eastern Canada

@@ -31,6 +31,10 @@ PARAM_TYPES    <- c("select", "text", "number", "checkbox")
 DEFAULT_FILTER <- c(category = "multiselect", text = "search", number = "range",
                     date = "range", boolean = "checkbox", path = "none")
 
+# Text that means "missing" in columns that must hold a number, date, coordinate or ID.
+# In category and text columns, "NA" is kept as a value in its own right.
+MISSING_TOKENS <- c("NA", "N/A")
+
 # ---- 1. Issue log and helpers ----------------------------------------------
 issues <- tibble(level = character(), where = character(), msg = character())
 
@@ -81,7 +85,7 @@ read_csv_folder <- function(dir, pattern = "*.csv") {
 
   tables <- map(files, \(f) {
     d <- read_csv(f, col_types = cols(.default = col_character()),
-                  na = c("", "NA", "N/A"), trim_ws = TRUE,
+                  na = "", trim_ws = TRUE,
                   name_repair = "minimal", progress = FALSE)
     names(d) <- str_squish(names(d))   # " Year" -> "Year"
     d$.file <- path_file(f)
@@ -140,9 +144,16 @@ coerce_coords <- function(d, where) {
   d
 }
 
+blank_tokens <- function(d, cols) {
+  for (col in intersect(cols, names(d))) d[[col]][d[[col]] %in% MISSING_TOKENS] <- NA
+  d
+}
+
+strict_cols <- function(colspec) colspec$column[colspec$type %in% c("number", "date", "boolean")]
+
 # ---- 2. Column specs ---------------------------------------------------------
 infer_type <- function(x) {
-  v <- x[!is.na(x)]
+  v <- x[!is.na(x) & !x %in% MISSING_TOKENS]
   if (!length(v)) return("text")
   if (all(!is.na(suppressWarnings(as.numeric(v))))) return("number")
   if (all(str_detect(v, "^\\d{4}(-\\d{2}){0,2}$"))) return("date")
@@ -241,6 +252,7 @@ read_plots <- function() {
   }
 
   colspec <- build_column_spec(d, s$columns %||% list(), unname(smap), yml_path)
+  d <- blank_tokens(d, c(unname(smap), strict_cols(colspec))) 
   check_column_values(d, colspec, dir)
 
   plots <- d |> rename(all_of(smap))
@@ -261,10 +273,12 @@ check_id <- function(s, dir, yml_path) {
   id <- s$id %||% path_file(dir)
   if (is.null(s$id)) {
     err(yml_path, "`id` is missing")
-  } else if (s$id != path_file(dir)) {
+  } else if (tolower(s$id) != tolower(path_file(dir))) {
     warn(yml_path, glue('id "{s$id}" differs from the folder name "{path_file(dir)}"'))
   }
-  if (!str_detect(id, "^[a-z0-9_]+$")) err(yml_path, glue('id "{id}" may only contain lowercase letters, numbers and _'))
+  if (!str_detect(id, "^[A-Za-z0-9_]+$")) err(yml_path, glue('id "{id}" may only contain letters, numbers and _'))
+  id <- tolower(id)
+
   if (is.null(s$name)) err(yml_path, "`name` is missing")
   id
 }
@@ -290,6 +304,7 @@ read_datatype <- function(dir, plots) {
 
   # -- type-specific columns
   colspec <- build_column_spec(d, s$columns %||% list(), unname(smap), yml_path)
+  d <- blank_tokens(d, c(unname(smap), strict_cols(colspec))) 
   check_column_values(d, colspec, dir)
 
   d <- d |> rename(all_of(smap))
@@ -339,7 +354,7 @@ read_datatype <- function(dir, plots) {
   links <- d |>
     select(uid, datatype, project_id, .file, .row) |>
     separate_longer_delim(project_id, delim = ";") |>
-    mutate(project_id = str_trim(project_id)) |>
+    mutate(project_id = tolower(str_trim(project_id))) |>
     filter(!is.na(project_id), project_id != "")
   noproj <- !d$uid %in% links$uid
   if (any(noproj)) warn(dir, glue("no project ID: {rows_at(d, noproj)}"))
@@ -391,7 +406,8 @@ read_project <- function(dir) {
   if (!mode %in% c("exact", "as_of")) { err(yml_path, 'join_mode must be "exact" or "as_of"'); mode <- "exact" }
   if (mode == "as_of" && !"year" %in% names(join)) { err(yml_path, "join_mode as_of needs `year` in join_on"); mode <- "exact" }
 
-  colspec <- build_column_spec(d, s$columns %||% list(), unname(join), yml_path)
+   colspec <- build_column_spec(d, s$columns %||% list(), unname(join), yml_path)
+  d <- blank_tokens(d, c(unname(join), strict_cols(colspec)))
   check_column_values(d, colspec, dir)
 
   d <- d |> rename(all_of(join))
@@ -457,7 +473,7 @@ read_publications <- function(project_ids, datatype_ids, links) {
     yr <- p$year %||% str_extract(p$citation, "\\b(19|20)\\d{2}\\b")
     p$year <- suppressWarnings(as.integer(yr))
     if (!is.null(yr) && is.na(p$year)) warn(f, glue('year "{yr}" is not a number'))
-
+    p$projects <- tolower(p$projects %||% character())
     for (x in p$projects %||% character()) {
       if (!x %in% project_ids) err(f, glue('projects: unknown project "{x}".{suggest(x, project_ids)}'))
     }
@@ -510,11 +526,6 @@ write_publications <- function(pubs, project_ids, datatype_ids) {
 # ---- 7. Outputs ----------------------------------------------------------------------
 SHARED_OUT <- c("uid", "datatype", "datapoint_name", "plot", "site", "lat", "lon",
                 "date", "date_start", "date_end", "date_precision")
-
-round_coords <- function(d, round_to) {
-  if (identical(round_to, "exact") || is.null(round_to)) return(d)
-  mutate(d, lat = round(lat, round_to), lon = round(lon, round_to))
-}
 
 datatype_meta <- function(x) {
   s <- x$schema; smap <- x$smap
@@ -587,7 +598,6 @@ report_issues <- function() {
 cli_h1("Building the James Lab data portal")
 
 plots <- read_plots()
-round_to <- attr(plots, "round_to") %||% "exact"
 
 dt_dirs   <- dir_ls(path(DATA_DIR, "datatypes"), type = "directory")
 datatypes <- map(dt_dirs, read_datatype, plots = plots) |> compact() |> unname()
@@ -599,9 +609,24 @@ proj_ids <- map_chr(projects, "id")
 
 links <- map(datatypes, "links") |> list_rbind()
 for (pid in setdiff(unique(links$project_id), proj_ids)) {
-  bad <- links$project_id == pid
-  err(path(DATA_DIR, "datatypes", links$datatype[bad][1]),
-      glue('project ID "{pid}" has no folder in data/projects/.{suggest(pid, proj_ids)} ({rows_at(links, bad)})'))
+  bad   <- links$project_id == pid
+  where <- path(DATA_DIR, "datatypes", links$datatype[bad][1])
+  
+  is_probable_typo <- function(x, choices) {
+    if (!length(choices)) return(FALSE)
+    d <- adist(tolower(x), tolower(choices))[1, ]   # edits needed: insert, delete, replace
+    max_d <- if (nchar(x) >= 8) 2 else 1            # short IDs: allow only 1 edit
+    any(d <= max_d)
+  }
+  
+  if (is_probable_typo(pid, proj_ids)) { 
+    err(where, glue('project ID "{pid}" has no folder in data/projects/.',
+                    '{suggest(pid, proj_ids)} ({rows_at(links, bad)})'))
+  } else {
+    # A project that hasn't been set up yet: skip it for now
+    warn(where, glue('project ID "{pid}" is not configured yet (no data/projects/{pid}/ folder); ',
+                     '{sum(bad)} datapoint(s) are not linked to it.{suggest(pid, proj_ids)}'))
+  }
 }
 
 for (p in projects) {
@@ -619,23 +644,20 @@ joined <- map(projects, \(p) tryCatch(
 )) |> set_names(proj_ids)
 
 pubs <- read_publications(proj_ids, dt_ids, links)
-bib  <- map(pubs, pub_bibtex) |> set_names(map_chr(pubs, "id"))
 
 report_issues()
 if (any(issues$level == "error")) cli_abort("Build stopped: fix the errors above, then run again.")
 
 # -- write everything
 dir_create(path(OUT_DIR, c("datatypes", "projects")))
-dir_create(PRIVATE_DIR)
 
-write_csv(round_coords(datapoints, round_to), path(OUT_DIR, "datapoints.csv"), na = "")
+write_csv(datapoints, path(OUT_DIR, "datapoints.csv"), na = "")
 write_csv(select(links, uid, datatype, project_id), path(OUT_DIR, "project_links.csv"), na = "")
 
 for (x in datatypes) {
   cols  <- x$colspec$column
   x$data |>
-    select(all_of(SHARED_OUT), project_id, all_of(pcols)) |>
-    round_coords(round_to) |>
+    select(all_of(SHARED_OUT), project_id, all_of(cols)) |>
     write_csv(path(OUT_DIR, "datatypes", paste0(x$id, ".csv")), na = "")
   write_json(datatype_meta(x), path(OUT_DIR, "datatypes", paste0(x$id, ".json")),
              auto_unbox = TRUE, pretty = TRUE, na = "null")
@@ -646,7 +668,6 @@ for (p in projects) {
   proj_cols <- p$colspec$column
   j |>
     select(any_of(c(SHARED_OUT, "year")), any_of(proj_cols)) |>
-    round_coords(round_to) |>
     write_csv(path(OUT_DIR, "projects", paste0(p$id, ".csv")), na = "")
   write_json(list(id = p$id, name = p$schema$name, description = p$schema$description,
                   contact = p$schema$contact, status = p$schema$status,
@@ -665,7 +686,7 @@ overview <- map(projects, \(p) tibble(
 )) |> list_rbind()
 write_csv(overview, path(OUT_DIR, "projects_overview.csv"), na = "")
 
-write_publications(pubs, bib, proj_ids, dt_ids)
+write_publications(pubs, proj_ids, dt_ids)
 write_navbar(projects, datatypes)
 write_pages(projects, datatypes)
 

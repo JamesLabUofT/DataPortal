@@ -1,6 +1,6 @@
 schema_version: 1
 
-id: jpbw
+id: JPBW
 name: Jack pine budworm project
 description: Studying the impact of the legacy of jack pine budworm (Choristoneura pinus pinus Freeman) defoliation on forest fuels
 
@@ -11,7 +11,7 @@ join_on:
 columns:
   Status:
     type: category
-    values: [control, defoliation, mortality]
+    values: [Control, Defoliation, Mortality]
     filter: multiselect
   Time since defoliation:
     type: number

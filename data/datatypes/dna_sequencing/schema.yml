@@ -9,55 +9,100 @@ description: >
   Sequencing of DNA data.
   One row per FASTQ file.
 files: "*.csv"
-
 shared:
-  datapoint_name: Fastq ID
+  datapoint_name: Fastq_ID
   lat: Latitude
   lon: Longitude
   site: Site
-  date: Year                     # year-only dates are fine
-  project_id: Project ID(s)
+  date: Year # year-only dates are fine
+  project_id: Project
 
 columns:
-  Original sample ID:
+  Fastq_ID_alternate_enzymes:
+    type: text
+    visibility: hidden
+  Original_Sample_ID (not unique):
     type: text
     filter: search
   Source:
     type: category
     filter: multiselect
+  Seq_Plate_ID:
+    type: text
+    visibility: hidden
+  Sex:
+    type: category
+    values: [F, M, NA] # anything else fails the build
+    filter: multiselect
+  Status:
+    type: category
+    filter: multiselect
   Sequencer:
     type: category
     filter: multiselect
-  Plate ID:
-    type: category
-    filter: select
-  Sex:
-    type: category
-    values: [F, M, unknown]      # anything else fails the build
-    filter: multiselect
-  Sample status:
-    type: category
-    values: [sequenced, failed, resequence]
-    filter: multiselect
-  Fastq tarball:
-    type: path
-    visibility: internal
+  Fastq_tarball:
+    visibility: hidden
+  Fastq_alt_enzyme_tarball:
+    visibility: hidden
 
 display:
-  table: [Fastq ID, Original sample ID, Site, Year, Sex, Sequencer, Sample status]
-  popup: "{{Fastq ID}} · {{Site}} · {{Year}}"
+  table:
+    [
+      Fastq_ID,
+      Original_Sample_ID (not unique),
+      Site,
+      Year,
+      Sex,
+      Sequencer,
+      Status,
+    ]
+  popup: "{{Fastq_ID}} · {{Site}} · {{Year}}"
 
 access:
   params:
-    dest_dir:
-      label: Destination folder on the server
+    input_vcf:
+      label: Input VCF on the server
       type: text
-      default: ~/dna_pull
-    extract:
-      label: Extract tarballs after copying
+      default: /path/to/SBW_INPUT_RUN3.vcf # ← replace with the real server path
+    out:
+      label: Output file prefix
+      type: text
+      default: sbw_subset
+    run_step1:
+      label: Run step 1 (depth/quality/MAC filtering; takes hours)
       type: checkbox
       default: true
+    step1_vcf:
+      label: Existing step-1 VCF (used only if step 1 is skipped)
+      type: text
+      default: sbw_step1.recode.vcf
+    min_dp:
+      label: Minimum read depth, --minDP (recommended 8)
+      type: number
+      default: 8
+    min_gq:
+      label: Minimum genotype quality, --minGQ (recommended 18)
+      type: number
+      default: 18
+    mac:
+      label: Minimum minor allele count, --mac (recommended 2)
+      type: number
+      default: 2
+    max_missing:
+      label: Min. proportion of samples genotyped per SNP, --max-missing (recommended 0.5)
+      type: number
+      default: 0.5
+    min_alleles:
+      label: Minimum alleles per SNP (recommended 2)
+      type: select
+      options: [2, 3, 4]
+      default: 2
+    max_alleles:
+      label: Maximum alleles per SNP (recommended 2)
+      type: select
+      options: [2, 3, 4]
+      default: 2
   templates:
-    - label: R
-      file: template.R
-      language: r
+    - label: Bash
+      file: template.sh
+      language: bash

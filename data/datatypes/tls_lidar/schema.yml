@@ -9,8 +9,8 @@ description: >
 files: "*.csv" # which CSVs in this folder are metadata
 # ── Shared dictionary: portal attribute → YOUR column name ──
 shared: # REQUIRED
-  datapoint_name: Scan_Name
-  plot_name: Plot_name
+  datapoint_name: Scan_name
+  plot: Plot_name
   date: Acquisition_date
   project_id: Project_IDs
 
@@ -21,7 +21,7 @@ columns:
     filter: multiselect
     description: Scanner model used for acquisition
   Raw_data_folder_name:
-    type: folder
+    type: text
     visibility: hidden
   Raw_data_path:
     type: path
@@ -46,8 +46,8 @@ columns:
 
 # ── Display (optional) ────────────────────────────────────
 display:
-  table: [Plot name, Site name, Acquisition date, Sensor type]
-  popup: "{{Plot name}} · {{Sensor type}} · {{Acquisition date}}"
+  table: [Plot_name, Scan_name, Acquisition_date, Sensor]
+  popup: "{{Scan_name}} · {{Acquisition_date}} · {{Sensor}}"
 
 # ── Data access: code chunk generation ────────────────────
 access:
