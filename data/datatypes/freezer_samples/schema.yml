@@ -1,0 +1,80 @@
+# data/datatypes/freezer_samples/schema.yml
+# A NON-PLOT data type: each row carries its own coordinates.
+# (A schema maps EITHER `plot` OR `lat`/`lon`, never both.)
+schema_version: 1
+
+id: freezer_samples
+name: Freezer samples
+description: >
+  Samples stored in our lab Freezer
+files: "*.csv"
+shared:
+  datapoint_name: Sample_ID
+  lon: Longitude
+  lat: Latitude
+  site: Site
+  date: Year # year-only dates are fine
+  project_id: Project
+
+unique_names: false
+
+columns:
+  Drawer:
+    type: category
+    values: ["1", "2", "3", "4", "5"]
+  Rack:
+    type: category
+    values: ["1", "2", "3", "4", "5", "6"]
+  Shelf:
+    type: category
+    values: [A, B, C, D]
+  Position:
+    type: category
+    values: ["1", "2", "3", "4", "5", "6", "7"]
+  Box_information:
+    type: text
+    filter: search
+  Species:
+    type: category
+    filter: multiselect
+  Collector:
+    type: text
+  Collection_date:
+    type: date
+  Collection_stage:
+    type: category
+    filter: multiselect
+  Sample_type:
+    type: category
+    filter: multiselect
+  Description of box:
+    visibility: hidden
+  notes:
+    visibility: hidden
+  Sample_Location:
+    type: text
+
+display:
+  table:
+    [
+      Sample_ID,
+      Species,
+      Site,
+      Year,
+      Sample_type,
+      Drawer,
+      Rack,
+      Shelf,
+      Position,
+      notes,
+    ]
+  popup: "{{Sample_ID}} · {{Site}} · {{Year}} · {{Sample_type}}"
+  freezer: # draw order comes from each column's `values:` list
+    drawer: Drawer # values 1→5 = top → bottom
+    rack: Rack # values 1→6 = left → right
+    shelf: Shelf # values A→D = top → bottom
+    position: Position # values 1→7 = front → back
+    label: Box_information
+    box_details: [Description of box] # one value per box: tooltip + pick list column
+    sample_details: [Sample_Location] # per sample: shown next to each ID in the pick list
+

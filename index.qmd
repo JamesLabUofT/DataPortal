@@ -1,11 +1,94 @@
 ---
-title: "DataPortal"
+title: "James Lab Data Portal"
+page-layout: full
+toc: false
+editor: source        # OJS cells: keep the visual editor away
+execute:
+  echo: false
 ---
 
-This is a Quarto website.
+Explore the datasets collected and/or used by the lab. Click a point on the map to see what was collected there, or open a project or data type below to filter the data and get the code to retrieve it. Interested in this data but not a member of the lab? Get in touch with us!
 
-To learn more about Quarto websites visit <https://quarto.org/docs/websites>.
+```{ojs}
+md`**${data.length.toLocaleString()}** datapoints · **${projects.length}** projects · **${datatypes.length}** data types`
+```
 
-```{r}
-1 + 1
+:::: {.columns}
+
+::: {.column width="22%"}
+```{ojs}
+viewof mapFilters = Inputs.form({
+  datatype: Inputs.checkbox(dtIds, {label: "Data type", format: dtName}),
+  projects: projects.length <= 8
+    ? Inputs.checkbox(projects.map(p => p.id), {label: "Project", format: id => projectName.get(id) ?? id})
+    : Inputs.select(projects.map(p => p.id), {label: "Project", multiple: true, format: id => projectName.get(id) ?? id})
+})
+```
+:::
+
+::: {.column width="3%"}
+:::
+
+::: {.column width="75%"}
+```{ojs}
+mapView = P.createMap({height: 520})
+```
+
+```{ojs}
+P.drawMarkers(mapView, mapRows, [], d => {
+  const projs = d.projects
+    .map(id => `<a href="projects/${id}.html">${P.escapeHtml(projectName.get(id) ?? id)}</a>`)
+    .join(", ");
+  return `${P.escapeHtml(d.datapoint_name)} · ` +
+    `<a href="datatypes/${d.datatype}.html">${P.escapeHtml(dtName(d.datatype))}</a> · ` +
+    `${P.escapeHtml(d.date)}${projs ? ` · ${projs}` : ""}`;
+})
+```
+:::
+
+::::
+
+## Projects
+
+```{ojs}
+P.projectsTable(projects, dtName)
+```
+
+## Data types
+
+```{ojs}
+P.datatypesTable(datatypes)
+```
+
+```{ojs}
+//| output: false
+import {makePortal} from "./assets/portal.js"
+```
+
+```{ojs}
+//| output: false
+
+leaflet = require("leaflet@1.9.4")
+P = makePortal({d3, Inputs, html, DOM, leaflet})
+
+// ---- Data written by build.R -----------------------------------------------------
+raw      = FileAttachment("_generated/datapoints.csv").csv()
+links    = FileAttachment("_generated/project_links.csv").csv()
+overview = FileAttachment("_generated/projects_overview.csv").csv()
+
+projects      = P.parseProjects(overview)
+projectName   = new Map(projects.map(p => [p.id, p.name]))
+projectsByUid = d3.rollup(links, v => v.map(l => l.project_id), l => l.uid)
+
+dtIds     = P.unique(raw, "datatype")
+dtMeta    = P.loadDatatypeMeta(dtIds)
+dtName    = id => dtMeta.get(id)?.name ?? id
+datatypes = P.datatypeSummary(raw, dtMeta)
+
+// ---- Rows on the map -------------------------------------------------------------
+data = P.prepareRows(raw, [], {merge: r => ({projects: projectsByUid.get(r.uid) ?? []})})
+
+mapRows = data.filter(d =>
+  (!mapFilters.datatype.length || mapFilters.datatype.includes(d.datatype)) &&
+  (!mapFilters.projects.length || mapFilters.projects.some(p => d.projects.includes(p))))
 ```

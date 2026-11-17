@@ -9,3 +9,9 @@
 _site/*
 
 _generated/*
+
+projects/*.qmd
+!projects/index.qmd
+
+datatypes/*.qmd
+!datatypes/index.qmd

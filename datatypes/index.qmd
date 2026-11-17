@@ -1,0 +1,24 @@
+---
+title: "Data types"
+toc: false
+editor: source
+execute:
+  echo: false
+---
+
+```{ojs}
+P.datatypesTable(datatypes, "../")
+```
+
+```{ojs}
+//| output: false
+import {makePortal} from "../assets/portal.js"
+```
+
+```{ojs}
+//| output: false
+P          = makePortal({d3, Inputs, html, DOM})
+datapoints = FileAttachment("../_generated/datapoints.csv").csv()
+dtMeta     = P.loadDatatypeMeta(P.unique(datapoints, "datatype"), "../")
+datatypes  = P.datatypeSummary(datapoints, dtMeta)
+```

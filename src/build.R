@@ -153,7 +153,7 @@ strict_cols <- function(colspec) colspec$column[colspec$type %in% c("number", "d
 
 # ---- 2. Column specs ---------------------------------------------------------
 infer_type <- function(x) {
-  v <- x[!is.na(x) & !x %in% MISSING_TOKENS]
+  v <- x[!is.na(x)]
   if (!length(v)) return("text")
   if (all(!is.na(suppressWarnings(as.numeric(v))))) return("number")
   if (all(str_detect(v, "^\\d{4}(-\\d{2}){0,2}$"))) return("date")
@@ -312,11 +312,39 @@ read_datatype <- function(dir, plots) {
 
   # -- datapoint names
   nm <- smap[["datapoint_name"]]
+  unique_names <- s$unique_names %||% TRUE
+  if (!is.logical(unique_names) || length(unique_names) != 1) {
+    err(yml_path, "`unique_names` must be true or false")
+    unique_names <- TRUE
+  }
+  
   blank <- is.na(d$datapoint_name)
-  if (any(blank)) err(dir, glue('blank "{nm}": {rows_at(d, blank)}'))
-  dup <- !blank & (duplicated(d$datapoint_name) | duplicated(d$datapoint_name, fromLast = TRUE))
-  if (any(dup)) err(dir, glue('duplicate "{nm}" ({toString(unique(d$datapoint_name[dup]))}): {rows_at(d, dup)}'))
-
+  if (any(blank)) {
+    if (unique_names) {
+      err(dir, glue('blank "{nm}": {rows_at(d, blank)}'))
+    } else {
+      # No name: generate a readable one, e.g. "freezer_samples-1"
+      generated <- paste0(id, "-", seq_len(sum(blank)))
+      clash <- generated %in% d$datapoint_name[!blank]
+      if (any(clash)) {
+        err(dir, glue('generated name(s) {toString(generated[clash])} already exist as "{nm}" values; ',
+                      "rename those rows or fill in the blank names"))
+      }
+      d$datapoint_name[blank] <- generated
+      note(dir, glue('{sum(blank)} row(s) without a "{nm}" were named {id}-1 to {id}-{sum(blank)}'))
+    }
+  }
+  
+  dup <- !is.na(d$datapoint_name) &
+    (duplicated(d$datapoint_name) | duplicated(d$datapoint_name, fromLast = TRUE))
+  if (any(dup)) {
+    if (unique_names) {
+      err(dir, glue('duplicate "{nm}" ({toString(head(unique(d$datapoint_name[dup]), 10))}): {rows_at(d, dup)}. ',
+                    "If names may repeat for this data type, add `unique_names: false` to schema.yml."))
+    } else {
+      note(dir, glue('{n_distinct(d$datapoint_name[dup])} "{nm}" value(s) are shared by more than one row (unique_names: false)'))
+    }
+  }
   # -- dates
   d <- bind_cols(d, parse_partial_dates(d$date))
   bad <- d$date_precision %in% "invalid"
@@ -350,7 +378,15 @@ read_datatype <- function(dir, plots) {
   }
 
   # -- project links (one row per datapoint x project)
-  d <- d |> mutate(datatype = id, uid = paste0(id, "::", datapoint_name))
+  # uid must be unique even when names aren't: repeated names get #1, #2, ...
+  occurrence <- ave(seq_along(d$datapoint_name), d$datapoint_name, FUN = seq_along)
+  repeated   <- d$datapoint_name %in% d$datapoint_name[duplicated(d$datapoint_name)]
+  d <- d |> mutate(
+    datatype = id,
+    uid = if_else(repeated,
+                  paste0(id, "::", datapoint_name, "#", occurrence),
+                  paste0(id, "::", datapoint_name))
+  )
   links <- d |>
     select(uid, datatype, project_id, .file, .row) |>
     separate_longer_delim(project_id, delim = ";") |>
@@ -370,6 +406,16 @@ read_datatype <- function(dir, plots) {
   for (t in s$access$templates %||% list()) {
     if (is.null(t$file) || !file_exists(path(dir, t$file))) {
       err(yml_path, glue('access.templates: file "{t$file %||% "?"}" not found in {dir}'))
+    }
+  }
+  
+  fz <- s$display$freezer
+  if (!is.null(fz)) {
+    for (k in c("drawer", "rack", "shelf", "position")) {
+      if (is.null(fz[[k]])) err(yml_path, glue("display.freezer: `{k}` is required"))
+    }
+    for (k in names(fz)) for (col in unlist(fz[[k]])) {
+      if (!col %in% known) err(yml_path, glue('display.freezer.{k}: "{col}" is not a column.{suggest(col, known)}'))
     }
   }
   params <- s$access$params %||% list()
@@ -544,7 +590,9 @@ datatype_meta <- function(x) {
   list(id = x$id, name = s$name, description = s$description, contact = s$contact,
        shared_labels = as.list(smap),
        columns = filter(x$colspec, visibility != "internal"),
-       display = list(table = to_out(s$display$table %||% character()), popup = popup),
+       display = compact(list(table = to_out(s$display$table %||% character()),
+                                      popup = popup,
+                                      freezer = s$display$freezer)),
        params = s$access$params %||% list(), templates = templates)
 }
 

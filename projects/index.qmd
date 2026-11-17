@@ -1,0 +1,24 @@
+---
+title: "Projects"
+toc: false
+editor: source
+execute:
+  echo: false
+---
+
+```{ojs}
+P.projectsTable(projects, dtName, "../")
+```
+
+```{ojs}
+//| output: false
+import {makePortal} from "../assets/portal.js"
+```
+
+```{ojs}
+//| output: false
+P        = makePortal({d3, Inputs, html, DOM})
+projects = P.parseProjects(await FileAttachment("../_generated/projects_overview.csv").csv())
+dtMeta   = P.loadDatatypeMeta([...new Set(projects.flatMap(p => p.datatypes))], "../")
+dtName   = id => dtMeta.get(id)?.name ?? id
+```

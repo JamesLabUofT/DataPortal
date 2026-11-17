@@ -65,6 +65,12 @@ html`<small>Tick rows to pull only those; otherwise all <b>${filtered.length}</b
 ```
 :::
 
+```{ojs}
+meta.display?.freezer?.drawer
+  ? html`<h2>Where to find them</h2>${P.freezerDiagram(filtered, data, meta.display.freezer, cols, selection)}`
+  : html``
+```
+
 ::::
 
 ## Get the data
