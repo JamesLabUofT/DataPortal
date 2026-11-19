@@ -1,0 +1,24 @@
+schema_version: 1
+
+id: graham
+name: Wapikaimaski Prescribed Burn
+description: Studying the impact of different harvesting methods on surface fuels. Prescribed burn planned by the OMNR which will also inform fire behaviour outputs.
+join_on:
+  plot: Label
+
+columns:
+  Treatment:
+    type: category
+    filter: multiselect
+    description: What harvesting treatment was done
+  Composition:
+    type: category
+    filter: multiselect
+    description: Stand composition before harvesting
+  Burn block:
+    type: category
+    filter: multiselect
+    description: The harvested area is divided into 9 burn block and a general broadcast burn area.
+  Notes:
+    type: text
+    visibility: hidden
