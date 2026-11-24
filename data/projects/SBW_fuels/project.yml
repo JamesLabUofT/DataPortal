@@ -1,0 +1,23 @@
+schema_version: 1
+
+id: SBW_fuels
+name: Spruce budworm fuels project
+description: Studying the impact of the legacy of spruce budworm (Choristoneura fumiferana) defoliation on forest fuels
+
+join_on:
+  plot: Plot name
+  year: Year
+
+columns:
+  Status:
+    type: category
+    values: [Control, Defoliation, Mortality]
+    filter: multiselect
+  Time since defoliation:
+    type: number
+    units: years
+    description: Years between the end of the last recorded defoliation year and the measurement year
+  Defoliation duration:
+    type: number
+    units: years
+    description: Cumulative years of defoliation
