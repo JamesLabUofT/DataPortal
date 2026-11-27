@@ -3,6 +3,13 @@
 # Run from the project root:   Rscript R/build.R
 # Quarto also runs it before each render (see _quarto.yml).
 
+# In CI, build.R runs as its own step before `quarto render`.
+# The workflow sets PORTAL_SKIP_BUILD for the render step, so the pre-render run is skipped.
+if (nzchar(Sys.getenv("PORTAL_SKIP_BUILD"))) {
+  message("PORTAL_SKIP_BUILD is set: build.R already ran, skipping")
+  quit(save = "no", status = 0)
+}
+
 suppressPackageStartupMessages({
   library(dplyr)
   library(tidyr)

@@ -1,0 +1,65 @@
+name: Build and publish the data portal
+
+on:
+  push:
+    branches: [main]
+  pull_request: # check data changes before they are merged (no publishing)
+  workflow_dispatch: # "Run workflow" button in the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true # prebuilt Linux packages: installs in seconds, not minutes
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::cli
+            any::dplyr
+            any::fs
+            any::glue
+            any::jsonlite
+            any::purrr
+            any::readr
+            any::stringr
+            any::tidyr
+            any::yaml
+
+      - uses: quarto-dev/quarto-actions/setup@v2
+
+      - name: Check and prepare portal data
+        run: Rscript src/build.R
+
+      - name: Render site
+        run: quarto render
+        env:
+          PORTAL_SKIP_BUILD: "1"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
