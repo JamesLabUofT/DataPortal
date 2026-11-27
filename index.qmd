@@ -17,11 +17,9 @@ md`**${data.length.toLocaleString()}** datapoints · **${projects.length}** proj
 
 ::: {.column width="22%"}
 ```{ojs}
-viewof mapFilters = Inputs.form({
-  datatype: Inputs.checkbox(dtIds, {label: "Data type", format: dtName}),
-  projects: projects.length <= 8
-    ? Inputs.checkbox(projects.map(p => p.id), {label: "Project", format: id => projectName.get(id) ?? id})
-    : Inputs.select(projects.map(p => p.id), {label: "Project", multiple: true, format: id => projectName.get(id) ?? id})
+viewof mapFilters = P.stack({
+  datatype: P.chips(dtIds, {label: "Data type", format: dtName}),
+  projects: P.chips(projects.map(p => p.id), {label: "Project", format: id => projectName.get(id) ?? id})
 })
 ```
 :::

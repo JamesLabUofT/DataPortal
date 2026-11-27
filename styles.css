@@ -1,1 +1,75 @@
-/* css styles */
+/* ---- Data portal controls ------------------------------------------------ */
+:root { --pr-accent: #dfd2a7; }
+
+/* Filters stacked vertically; labels above controls, full width */
+.pr-filters { display: flex; flex-direction: column; gap: .9rem; }
+.pr-label   { font-weight: 600; font-size: .9rem; margin-bottom: .3rem; overflow-wrap: anywhere; }
+
+/* Observable Inputs (search box, single select): label above, full width */
+.pr-filters [class*="oi-"] { --label-width: 100%; --input-width: 100%; max-width: 100%; flex-wrap: wrap; }
+.pr-filters [class*="oi-"] > label { width: 100%; font-weight: 600; font-size: .9rem; overflow-wrap: anywhere; }
+
+/* Plain buttons (Clear filters, CSV download): readable in every state */
+.pr-button,
+form[class*="oi-"] button,
+a[download] > button {
+  background: var(--bs-body-bg, #fff);
+  color: var(--bs-body-color, #212529);
+  border: 1px solid var(--bs-border-color, #ced4da);
+  border-radius: .3rem;
+  padding: .25rem .75rem;
+  font-size: .875rem;
+  cursor: pointer;
+}
+.pr-button:hover,
+form[class*="oi-"] button:hover,
+a[download] > button:hover { background: var(--bs-tertiary-bg, #f1f3f5); color: var(--bs-body-color, #212529); }
+
+/* Toggle buttons for multi-select filters; wrap to the column width */
+.pr-chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+.pr-chip {
+  background: var(--bs-body-bg, #fff);
+  color: var(--bs-body-color, #212529);
+  border: 1px solid var(--bs-border-color, #ced4da);
+  border-radius: 999px;
+  padding: .15rem .65rem;
+  font-size: .85rem;
+  line-height: 1.3;
+  white-space: normal;
+  text-align: left;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.pr-chip:hover { border-color: var(--pr-accent); }
+.pr-chip[aria-pressed="true"] { background: var(--pr-accent); border-color: var(--pr-accent); color: #fff; }
+
+/* Two-handle range slider */
+.pr-range { position: relative; height: 24px; }
+.pr-track, .pr-fill { position: absolute; top: 10px; height: 4px; border-radius: 2px; }
+.pr-track { left: 0; right: 0; background: var(--bs-border-color, #dee2e6); }
+.pr-fill  { background: var(--pr-accent); }
+.pr-range input[type=range] {
+  position: absolute; left: 0; top: 4px; width: 100%; height: 16px; margin: 0;
+  background: none; pointer-events: none; -webkit-appearance: none; appearance: none;
+}
+.pr-range input[type=range]::-webkit-slider-runnable-track { background: transparent; }
+.pr-range input[type=range]::-moz-range-track { background: transparent; }
+.pr-range input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; pointer-events: auto; cursor: pointer;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--pr-accent); border: 2px solid #fff; box-shadow: 0 0 0 1px #868e96;
+}
+.pr-range input[type=range]::-moz-range-thumb {
+  pointer-events: auto; cursor: pointer;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--pr-accent); border: 2px solid #fff; box-shadow: 0 0 0 1px #868e96;
+}
+.pr-readout { display: flex; align-items: center; gap: .4rem; margin-top: .25rem; }
+.pr-readout input { flex: 1 1 0; min-width: 0; font-size: .8rem; padding: .1rem .3rem;
+  border: 1px solid var(--bs-border-color, #ced4da); border-radius: .25rem; }
+
+/* Text that should wrap rather than overflow */
+form[class*="oi-"] table td, form[class*="oi-"] table th { white-space: normal; overflow-wrap: anywhere; }
+.leaflet-popup-content { overflow-wrap: anywhere; }
+pre.sourceCode { overflow-x: auto; }

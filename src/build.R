@@ -35,6 +35,8 @@ DEFAULT_FILTER <- c(category = "multiselect", text = "search", number = "range",
 # In category and text columns, "NA" is kept as a value in its own right.
 MISSING_TOKENS <- c("NA", "N/A")
 
+BBOX_OUT <- c("bbox_west", "bbox_south", "bbox_east", "bbox_north")
+
 # ---- 1. Issue log and helpers ----------------------------------------------
 issues <- tibble(level = character(), where = character(), msg = character())
 
@@ -150,6 +152,42 @@ blank_tokens <- function(d, cols) {
 }
 
 strict_cols <- function(colspec) colspec$column[colspec$type %in% c("number", "date", "boolean")]
+
+# geometry: bbox: [west, south, east, north] -> named c(bbox_west = "West", ...)
+check_bbox <- function(g, d, yml_path) {
+  cols <- unlist(g$bbox)
+  if (is.null(cols)) return(character())
+  if (length(cols) != 4) {
+    err(yml_path, "geometry.bbox needs 4 columns: [west, south, east, north]")
+    return(character())
+  }
+  miss <- setdiff(cols, names(d))
+  for (m in miss) err(yml_path, glue('geometry.bbox: column "{m}" is not in the CSV.{suggest(m, names(d))}'))
+  if (length(miss)) return(character())
+  setNames(cols, BBOX_OUT)
+}
+
+# Numbers, all-or-nothing, west < east, south < north, inside the expected area
+coerce_bbox <- function(d, where) {
+  for (k in BBOX_OUT) {
+    if (!k %in% names(d)) { d[[k]] <- NA_real_; next }
+    num <- suppressWarnings(as.numeric(d[[k]]))
+    bad <- !is.na(d[[k]]) & is.na(num)
+    if (any(bad)) err(where, glue("{k} is not a number: {rows_at(d, bad)}"))
+    d[[k]] <- num
+  }
+  n_set <- rowSums(!is.na(as.matrix(d[BBOX_OUT])))
+  partial <- n_set > 0 & n_set < 4
+  if (any(partial)) err(where, glue("bounding box needs all four values: {rows_at(d, partial)}"))
+
+  ok <- n_set == 4
+  flipped <- ok & (d$bbox_west >= d$bbox_east | d$bbox_south >= d$bbox_north)
+  if (any(flipped)) err(where, glue("bounding box has west >= east or south >= north: {rows_at(d, flipped)}"))
+  outside <- ok & (d$bbox_west < BBOX$lon[1] | d$bbox_east > BBOX$lon[2] |
+                   d$bbox_south < BBOX$lat[1] | d$bbox_north > BBOX$lat[2])
+  if (any(outside)) err(where, glue("bounding box outside the expected area (check CRS or signs): {rows_at(d, outside)}"))
+  d
+}
 
 # ---- 2. Column specs ---------------------------------------------------------
 infer_type <- function(x) {
@@ -345,20 +383,23 @@ read_datatype <- function(dir, plots) {
   # -- shared mapping
   smap <- check_mapping(s$shared, SHARED_KEYS, d, yml_path, "shared")
   
+  bbox_cols <- check_bbox(s$geometry, d, yml_path)
+  if (!"plot" %in% names(smap) && !all(c("lat", "lon") %in% names(smap)) && !length(bbox_cols)) {
+    err(yml_path, "shared: map `plot`, or `lat` and `lon`, or add `geometry: bbox:`")
+  }
+
   for (k in c("datapoint_name", "date", "project_id")) {
     if (!k %in% names(smap)) err(yml_path, glue("shared: `{k}` is required (and must match a CSV column)"))
-  }
-  if (!"plot" %in% names(smap) && !all(c("lat", "lon") %in% names(smap))) {
-    err(yml_path, "shared: map `plot`, or `lat` and `lon`, or all three")
   }
   if (!all(c("datapoint_name", "date", "project_id") %in% names(smap))) return(NULL)
 
   # -- type-specific columns
-  colspec <- build_column_spec(d, s$columns %||% list(), unname(smap), yml_path)
-  d <- blank_tokens(d, c(unname(smap), strict_cols(colspec))) 
+  colspec <- build_column_spec(d, s$columns %||% list(), c(unname(smap), unname(bbox_cols)), yml_path)
+  d <- blank_tokens(d, c(unname(smap), unname(bbox_cols), strict_cols(colspec)))
   check_column_values(d, colspec, dir)
 
   d <- d |> rename(all_of(smap))
+  if (length(bbox_cols)) d <- d |> rename(all_of(bbox_cols))
   for (k in setdiff(SHARED_KEYS, names(d))) d[[k]] <- NA_character_
 
   # -- datapoint names
@@ -405,6 +446,11 @@ read_datatype <- function(dir, plots) {
 
   # -- coordinates: from plots.csv first, then the row's own lat/lon
   d <- coerce_coords(d, dir)
+  d <- coerce_bbox(d, dir)   # also adds empty bbox columns for data types without boxes
+  d <- d |> mutate(
+    lat = coalesce(lat, (bbox_south + bbox_north) / 2),
+    lon = coalesce(lon, (bbox_west  + bbox_east)  / 2)
+  )
   if ("plot" %in% names(smap) && !is.null(plots)) {
     d <- d |>
       left_join(select(plots, plot, reg_site = site, reg_lat = lat, reg_lon = lon), by = "plot")
@@ -623,7 +669,12 @@ write_publications <- function(pubs, project_ids, datatype_ids) {
 
 # ---- 7. Outputs ----------------------------------------------------------------------
 SHARED_OUT <- c("uid", "datatype", "datapoint_name", "plot", "site", "lat", "lon",
-                "date", "date_start", "date_end", "date_precision")
+                "date", "date_start", "date_end", "date_precision", BBOX_OUT)
+
+round_coords <- function(d, round_to) {
+  if (identical(round_to, "exact") || is.null(round_to)) return(d)
+  mutate(d, across(any_of(c("lat", "lon", BBOX_OUT)), \(x) round(x, round_to)))
+}
 
 datatype_meta <- function(x) {
   s <- x$schema; smap <- x$smap

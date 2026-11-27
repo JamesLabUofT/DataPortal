@@ -22,15 +22,15 @@ md`${P.str(meta.description)}
 ### Filter
 
 ```{ojs}
-viewof clearFilters = Inputs.button("Clear filters")
+viewof clearFilters = P.button("Clear filters")
 ```
 
 ```{ojs}
 viewof filters = {
-  clearFilters;   // re-run (and so reset) this form whenever "Clear filters" is clicked
+  clearFilters;
   const projIds = [...new Set(data.flatMap(d => d.projects))].sort();
   const extra = projIds.length
-    ? {projects: Inputs.select(projIds, {label: "Project", multiple: true, format: id => projectName.get(id) ?? id})}
+    ? {projects: P.chips(projIds, {label: "Project", format: id => projectName.get(id) ?? id})}
     : {};
   return P.filterForm(data, filterCols, extra);
 }

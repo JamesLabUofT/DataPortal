@@ -18,7 +18,120 @@ export function makePortal({d3, Inputs, html, DOM, leaflet, Mustache}) {
     [...new Set(data.map(d => d[col]).filter(v => v != null && v !== ""))].sort();
 
   const PREVIEW_ROWS = 5;
-    const CANADA = leaflet ? leaflet.latLngBounds([41, -141], [70, -52]) : null;
+  const CANADA = leaflet ? leaflet.latLngBounds([41, -141], [70, -52]) : null;
+
+    // ---- Small input components --------------------------------------------------
+  // Each returns an element with a `value` and fires "input" events, like Observable Inputs,
+  // so they work with viewof and Inputs.form.
+  const el   = (tag, props = {}) => Object.assign(document.createElement(tag), props);
+  const emit = node => node.dispatchEvent(new Event("input", {bubbles: true}));
+  const DAY  = 86400000;
+  const isoDay = ms => new Date(ms).toISOString().slice(0, 10);
+
+  // A plain button whose value counts clicks (for "Clear filters")
+  function button(label) {
+    const b = el("button", {type: "button", className: "pr-button", textContent: label});
+    let clicks = 0;
+    Object.defineProperty(b, "value", {get: () => clicks});
+    b.onclick = () => { clicks++; emit(b); };
+    return b;
+  }
+
+  // Toggle buttons that wrap to the available width; value = selected options
+  function chips(options, {label, format = String} = {}) {
+    const root = el("div", {className: "pr-field"});
+    if (label) root.append(el("div", {className: "pr-label", textContent: label}));
+    const wrap = el("div", {className: "pr-chips"});
+    const selected = new Set();
+    for (const o of options) {
+      const b = el("button", {type: "button", className: "pr-chip", textContent: format(o)});
+      b.setAttribute("aria-pressed", "false");
+      b.onclick = () => {
+        selected.has(o) ? selected.delete(o) : selected.add(o);
+        b.setAttribute("aria-pressed", String(selected.has(o)));
+        emit(root);
+      };
+      wrap.append(b);
+    }
+    root.append(wrap);
+    Object.defineProperty(root, "value", {get: () => options.filter(o => selected.has(o))});
+    return root;
+  }
+
+  // Toggle buttons for short lists, a scrolling multi-select for very long ones
+  const choiceInput = (opts, o) => opts.length <= 40
+    ? chips(opts, o)
+    : Inputs.select(opts, {...o, multiple: true});
+
+  // Two-handle slider with editable boxes underneath.
+  // kind "number" or "date" (dates in ms, whole days). value = [lo, hi]:
+  // each end is null while its handle is at the end of the range (= no filter on that side).
+  function rangeSlider({label, min, max, step, kind = "number", units = ""}) {
+    const dates = kind === "date";
+    step = step ?? (dates ? DAY
+      : Number.isInteger(min) && Number.isInteger(max) ? 1 : (max - min) / 200);
+    const show = v => dates ? isoDay(v) : String(+(+v).toFixed(6));
+
+    const root = el("div", {className: "pr-field"});
+    root.append(el("div", {className: "pr-label", textContent: label + (units ? ` (${units})` : "")}));
+
+    const box  = el("div", {className: "pr-range"});
+    const fill = el("div", {className: "pr-fill"});
+    const mk   = v => el("input", {type: "range", min, max, step, value: v});
+    const lo = mk(min), hi = mk(max);
+    box.append(el("div", {className: "pr-track"}), fill, lo, hi);
+
+    const loBox = el("input", {type: dates ? "date" : "number"});
+    const hiBox = el("input", {type: dates ? "date" : "number"});
+    if (!dates) loBox.step = hiBox.step = "any";
+    const readout = el("div", {className: "pr-readout"});
+    readout.append(loBox, el("span", {textContent: "–"}), hiBox);
+    root.append(box, readout);
+
+    const atMin = v => v <= min + step / 2;
+    const atMax = v => v >= max - step / 2;
+    const pct   = v => ((v - min) / (max - min)) * 100;
+
+    const sync = () => {
+      const a = +lo.value, b = +hi.value;
+      fill.style.left  = `${pct(a)}%`;
+      fill.style.width = `${pct(b) - pct(a)}%`;
+      loBox.value = show(a);
+      hiBox.value = show(b);
+      lo.style.zIndex = atMax(a) ? 3 : 2;   // keep the left handle grabbable when both sit at the right end
+    };
+    const changed = () => { sync(); emit(root); };
+
+    lo.addEventListener("input", e => { e.stopPropagation(); if (+lo.value > +hi.value) lo.value = hi.value; changed(); });
+    hi.addEventListener("input", e => { e.stopPropagation(); if (+hi.value < +lo.value) hi.value = lo.value; changed(); });
+
+    // Typing in the boxes: applied on Enter or when leaving the box
+    const parse = s => dates ? Date.parse(s) : parseFloat(s);   // "YYYY-MM-DD" parses as UTC midnight
+    for (const [input, slider, other, isLo] of [[loBox, lo, hi, true], [hiBox, hi, lo, false]]) {
+      input.addEventListener("input", e => e.stopPropagation());
+      input.addEventListener("change", e => {
+        e.stopPropagation();
+        let v = parse(input.value);
+        if (!Number.isFinite(v)) v = isLo ? min : max;
+        v = Math.min(max, Math.max(min, v));
+        v = isLo ? Math.min(v, +other.value) : Math.max(v, +other.value);
+        slider.value = v;
+        changed();
+      });
+    }
+
+    sync();
+    Object.defineProperty(root, "value", {get: () => {
+      const a = +lo.value, b = +hi.value, out = v => dates ? new Date(v) : v;
+      return [atMin(a) ? null : out(a), atMax(b) ? null : out(b)];
+    }});
+    return root;
+  }
+
+  // Inputs.form laid out as a vertical stack (labels above controls)
+  const stack = inputs => Inputs.form(inputs, {
+    template: ins => { const d = el("div", {className: "pr-filters"}); d.append(...Object.values(ins)); return d; }
+  });
 
   // ---- Columns -----------------------------------------------------------------
   function normalizeColumns(columns) {
@@ -44,6 +157,11 @@ export function makePortal({d3, Inputs, html, DOM, leaflet, Mustache}) {
         date_end:   r.date_end   ? new Date(r.date_end)   : null
       };
       for (const c of cols) if (c.type === "number") d[c.column] = num(r[c.column]);
+
+      // Bounding box -> Leaflet [[south, west], [north, east]], or null
+      const bb = ["bbox_south", "bbox_west", "bbox_north", "bbox_east"].map(k => num(r[k]));
+      d.bbox = bb.every(Number.isFinite) ? [[bb[0], bb[1]], [bb[2], bb[3]]] : null;
+      for (const c of cols) if (c.type === "number") d[c.column] = num(r[c.column]);
       d._text = [r.datapoint_name, r.plot, r.site, r.date,
                  ...publicCols.map(c => r[c.column]), ...text(r)]
         .map(v => v ?? "").join(" ").toLowerCase();
@@ -51,60 +169,61 @@ export function makePortal({d3, Inputs, html, DOM, leaflet, Mustache}) {
     });
   }
 
-  // ---- Filters -------------------------------------------------------------------
+    // ---- Filters -------------------------------------------------------------------
   // `extra` = page-specific inputs (project or data type), shown after the search box
   function filterForm(data, filterCols, extra = {}) {
     const inputs = {q: Inputs.text({label: "Search", placeholder: "Any column…"}), ...extra};
 
     const sites = unique(data, "site");
-    if (sites.length > 1) inputs.site = Inputs.select(sites, {label: "Site", multiple: true});
+    if (sites.length > 1) inputs.site = choiceInput(sites, {label: "Site"});
 
-    inputs.from = Inputs.date({label: "From"});
-    inputs.to   = Inputs.date({label: "To"});
+    const starts = data.map(d => d.date_start).filter(isDate);
+    const ends   = data.map(d => d.date_end).filter(isDate);
+    if (starts.length && d3.max(ends) > d3.min(starts)) {
+      inputs.date = rangeSlider({label: "Date", kind: "date", min: +d3.min(starts), max: +d3.max(ends)});
+    }
 
     for (const c of filterCols) {
       const label = c.label + (c.units ? ` (${c.units})` : "");
       if (c.filter === "multiselect") {
         const opts = c.values.length ? c.values : unique(data, c.column);
-        inputs[c.column] = opts.length <= 8
-          ? Inputs.checkbox(opts, {label})
-          : Inputs.select(opts, {label, multiple: true});
+        inputs[c.column] = choiceInput(opts, {label});
       } else if (c.filter === "select" || c.filter === "checkbox") {
         inputs[c.column] = Inputs.select([null, ...unique(data, c.column)], {label, format: v => v ?? "(any)"});
       } else if (c.filter === "search") {
         inputs[c.column] = Inputs.text({label, placeholder: "contains…"});
       } else if (c.filter === "range") {
-        const v = data.map(d => d[c.column]).filter(x => x != null);
-        inputs[c.column] = Inputs.form([
-          Inputs.number({label: `${label} ≥`, placeholder: d3.min(v)}),
-          Inputs.number({label: `${label} ≤`, placeholder: d3.max(v)})
-        ]);
+        const v = data.map(d => d[c.column]).filter(Number.isFinite);
+        const lo = d3.min(v), hi = d3.max(v);
+        if (v.length && hi > lo) inputs[c.column] = rangeSlider({label: c.label, units: c.units, min: lo, max: hi});
       }
     }
-    return Inputs.form(inputs);
+    return stack(inputs);
   }
 
-  // The shared part of filtering; pages add their own test for `extra` inputs
   function matches(d, f, filterCols) {
     if (f.q && !d._text.includes(f.q.toLowerCase())) return false;
     if (f.site?.length && !f.site.includes(d.site)) return false;
+
     // keep rows whose date range overlaps the chosen range (works for "2022" too)
-    if (isDate(f.from) && (!d.date_end   || d.date_end   < f.from)) return false;
-    if (isDate(f.to)   && (!d.date_start || d.date_start > f.to))   return false;
+    const [from, to] = f.date ?? [null, null];
+    if (from && (!d.date_end   || d.date_end   < from)) return false;
+    if (to   && (!d.date_start || d.date_start > to))   return false;
 
     for (const c of filterCols) {
       const v = d[c.column], fv = f[c.column];
+      if (fv == null) continue;   // no control for this column (e.g. a single value)
       switch (c.filter) {
         case "multiselect":
           if (fv.length && !fv.includes(v)) return false; break;
         case "select": case "checkbox":
-          if (fv != null && v !== fv) return false; break;
+          if (v !== fv) return false; break;
         case "search":
           if (fv && !String(v ?? "").toLowerCase().includes(fv.toLowerCase())) return false; break;
         case "range": {
           const [lo, hi] = fv;
-          if (Number.isFinite(lo) && !(v >= lo)) return false;
-          if (Number.isFinite(hi) && !(v <= hi)) return false;
+          if (lo != null && !(v >= lo)) return false;
+          if (hi != null && !(v <= hi)) return false;
         }
       }
     }
@@ -149,17 +268,53 @@ export function makePortal({d3, Inputs, html, DOM, leaflet, Mustache}) {
     return tpl.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, k) => escapeHtml(d[k]));
   }
 
-  // One marker per location (same plot, or same coordinates when there is no plot).
-  // popupLine(d) returns the HTML for one datapoint's line in the popup.
-  function drawMarkers(view, rows, selection, popupLine) {
+    function drawMarkers(view, rows, selection, popupLine) {
     const {map, layer} = view;
     layer.clearLayers();
     const sel = new Set(selection.map(d => d.uid));
-    const pts = rows.filter(d => d.lat != null && d.lon != null);
+
+        // ---- Flights (rows with a bounding box): box + a point used only when zoomed out
+    const boxStyle = on => ({
+      color: on ? "#d95f02" : "#1b6f7a", weight: on ? 2.5 : 1.5,
+      fillColor: on ? "#d95f02" : "#1b6f7a", fillOpacity: on ? 0.2 : 0.06
+    });
+    const boxes = rows.filter(d => d.bbox);
+    const boxItems = boxes.map(d => {
+      const on = sel.has(d.uid);
+      const name = String(d.datapoint_name);
+      const popup = `${popupLine(d)}${on ? " <b>✓</b>" : ""}`;
+      const centre = [(d.bbox[0][0] + d.bbox[1][0]) / 2, (d.bbox[0][1] + d.bbox[1][1]) / 2];
+
+      const rect = leaflet.rectangle(d.bbox, boxStyle(on))
+        .bindTooltip(name).bindPopup(popup).addTo(layer);
+      const dot = leaflet.circleMarker(centre, {
+        radius: on ? 8 : 6, weight: 1, color: "#fff",
+        fillColor: on ? "#d95f02" : "#1b6f7a", fillOpacity: 0.85
+      }).bindTooltip(name).bindPopup(popup);      // same name and popup as the box
+
+      return {bbox: d.bbox, dot};
+    });
+
+    // Show a flight's point only while its box is smaller than ~12 px on screen
+    const toggleDots = () => {
+      for (const b of boxItems) {
+        const p1 = map.latLngToContainerPoint(b.bbox[0]);
+        const p2 = map.latLngToContainerPoint(b.bbox[1]);
+        const tiny = Math.abs(p2.x - p1.x) < 12 && Math.abs(p2.y - p1.y) < 12;
+        if (tiny && !layer.hasLayer(b.dot)) b.dot.addTo(layer);
+        if (!tiny && layer.hasLayer(b.dot)) layer.removeLayer(b.dot);
+      }
+    };
+    if (view._toggleDots) map.off("zoomend", view._toggleDots);   // drop the previous redraw's handler
+    view._toggleDots = toggleDots;
+    map.on("zoomend", toggleDots);
+
+    // ---- Point data: one marker per location (rows without a box)
+    const pts = rows.filter(d => !d.bbox && d.lat != null && d.lon != null);
     const groups = d3.groups(pts, d => d.plot || `${d.lat.toFixed(5)},${d.lon.toFixed(5)}`);
 
     for (const [key, rs] of groups) {
-      rs.sort((a, b) => (a.date_start ?? 0) - (b.date_start ?? 0));   // oldest first
+      rs.sort((a, b) => (a.date_start ?? 0) - (b.date_start ?? 0));
       const n = rs.length;
       const anySel = rs.some(d => sel.has(d.uid));
       const first = rs[0];
@@ -179,14 +334,17 @@ export function makePortal({d3, Inputs, html, DOM, leaflet, Mustache}) {
         .addTo(layer);
     }
 
-    const inArea = pts.filter(d => CANADA.contains([d.lat, d.lon]));
-    view.fit(inArea.length
-      ? leaflet.latLngBounds(inArea.map(d => [d.lat, d.lon])).pad(0.2)
-      : CANADA);
+    const corners = [...pts.map(d => [d.lat, d.lon]), ...boxes.flatMap(d => d.bbox)]
+    .filter(ll => CANADA.contains(ll));
+    view.fit(corners.length ? leaflet.latLngBounds(corners).pad(0.2) : CANADA);
+    toggleDots();   // in case the zoom didn't change
 
-    const missing = rows.length - pts.length;
-    return html`<small>${pts.length} of ${rows.length} datapoints at ${groups.length} location(s)${
-      missing ? ` (${missing} without coordinates)` : ""}.</small>`;
+    const shown = pts.length + boxes.length;
+    const missing = rows.length - shown;
+    return html`<small>${shown} of ${rows.length} datapoints on the map${
+      groups.length ? ` (${groups.length} location(s)` : " ("}${
+      boxes.length ? `${groups.length ? ", " : ""}${boxes.length} flight footprint(s)` : ""})${
+      missing ? `, ${missing} without coordinates` : ""}.</small>`;
   }
 
   // ---- Code chunks ------------------------------------------------------------------
@@ -534,6 +692,7 @@ export function makePortal({d3, Inputs, html, DOM, leaflet, Mustache}) {
   return {
     asArray, str, num, isDate, escapeHtml, unique, CANADA, PREVIEW_ROWS,
     normalizeColumns, prepareRows, filterForm, matches,
+    button, chips, rangeSlider, stack,
     createMap, fillPopup, drawMarkers, freezerDiagram,
     paramsForm, codePanels, assignRows, csvDownload,
     parseProjects, loadDatatypeMeta, datatypeSummary, projectsTable, datatypesTable

@@ -26,16 +26,14 @@ execute:
 ### Filter
 
 ```{ojs}
-viewof clearFilters = Inputs.button("Clear filters")
+viewof clearFilters = P.button("Clear filters")
 ```
 
 ```{ojs}
 viewof filters = {
-  clearFilters;   // re-run (and so reset) this form whenever "Clear filters" is clicked
+  clearFilters;
   const types = P.unique(data, "datatype");
-  const extra = types.length > 1
-    ? {datatype: Inputs.checkbox(types, {label: "Data type", format: dtName})}
-    : {};
+  const extra = types.length > 1 ? {datatype: P.chips(types, {label: "Data type", format: dtName})} : {};
   return P.filterForm(data, filterCols, extra);
 }
 ```
