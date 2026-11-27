@@ -1,0 +1,35 @@
+schema_version: 1
+id: uav_lidar
+name: UAV lidar
+description: >
+  Drone lidar flights. Boxes on the map show each flight's extent.
+files: "*.csv"
+shared:
+  datapoint_name: Flight_ID
+  date: Flight_date
+  project_id: Project_IDs
+  # no lat/lon needed: the centre of the bounding box is used
+
+geometry:
+  bbox: [West, South, East, North] # decimal degrees
+
+columns:
+  File_path: { type: path, visibility: hidden }
+  File_name: { type: text, visibility: hidden }
+  Point_count:
+    type: number
+    label: Points
+    filter: none
+  Sensor:
+    type: category
+  File_size_MB:
+    type: number
+    units: MB
+    label: File size (MB)
+    filter: none
+  Source:
+    type: category
+
+display:
+  table: [Flight_ID, Flight_date, Sensor, File_size_MB, Source]
+  popup: "{{Flight_ID}} · {{Flight_date}} · {{Sensor}}"
