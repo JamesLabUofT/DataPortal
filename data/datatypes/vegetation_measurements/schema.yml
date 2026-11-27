@@ -1,0 +1,51 @@
+# data/datatypes/tls_lidar/schema.yml
+schema_version: 1 # lets you change the format later without breaking old files
+
+# ── Identity ──────────────────────────────────────────────
+id: vegetation_measurements # unique, lowercase, no spaces; used in URLs and file names
+name: Vegetation measurements # shown in the navbar and page titles
+description: >
+  Vegetation measurements of forest plots.
+files: "*.csv" # which CSVs in this folder are metadata
+# ── Shared dictionary: portal attribute → YOUR column name ──
+shared: # REQUIRED
+  datapoint_name: [Veg_name, Protocol]
+  plot: Plot_name
+  date: Measurement_date
+  project_id: Project_IDs
+
+# ── Data-type-specific columns (all optional) ──
+columns:
+  Protocol:
+    type: category
+    filter: multiselect
+    description: Protocol used to acquire data
+
+# ── Display (optional) ────────────────────────────────────
+display:
+  table: [Plot_name, Measurement_date, Protocol]
+  popup: "{{Plot_name}} · {{Measurement_date}} · {{Protocol}}"
+
+# ── Data access: code chunk generation ────────────────────
+access:
+  params: # inputs the user picks; values appear in the chunk
+    product:
+      label: Measured information
+      type: select
+      options:
+        [
+          TreeRegen,
+          ForestFloor,
+          FineWoodyDebris,
+          CoarseWoodyDebris,
+          Bryoid,
+          LowShrub,
+          Herb,
+          SubcanopyTree,
+          CanopyTree,
+          ShrubLayer,
+          LowerCanopy,
+          UpperCanopy,
+          SlashDepth,
+        ]
+      default: CanopyTree

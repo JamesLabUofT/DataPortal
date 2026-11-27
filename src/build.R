@@ -283,6 +283,48 @@ check_id <- function(s, dir, yml_path) {
   id
 }
 
+# shared: datapoint_name may be one column, a list of columns, or
+#   {columns: [...], sep: "_", label: "..."}.
+# A list is joined into a new column, which then acts as the datapoint name.
+compose_datapoint_name <- function(s, d, yml_path) {
+  spec <- s$shared$datapoint_name
+  if (is.null(spec) || (is.character(spec) && length(spec) == 1)) {
+    return(list(s = s, d = d, desc = NULL))
+  }
+  
+  cols  <- unlist(if (is.list(spec) && !is.null(spec$columns)) spec$columns else spec)
+  sep   <- (if (is.list(spec)) spec$sep)   %||% "_"
+  label <- (if (is.list(spec)) spec$label) %||% "Datapoint ID"
+  
+  problems <- FALSE
+  if (!is.character(cols) || length(cols) < 2) {
+    err(yml_path, "shared: datapoint_name needs one column name, or a list of at least two")
+    problems <- TRUE
+  }
+  for (m in setdiff(cols, names(d))) {
+    err(yml_path, glue('shared: datapoint_name uses column "{m}", which is not in the CSV.{suggest(m, names(d))}'))
+    problems <- TRUE
+  }
+  if (label %in% names(d)) {
+    err(yml_path, glue('shared: datapoint_name label "{label}" is already a CSV column; choose another `label`'))
+    problems <- TRUE
+  }
+  if (problems) {
+    s$shared$datapoint_name <- NULL
+    return(list(s = s, d = d, desc = NULL))
+  }
+  
+  # "NA"/"N/A" in a part counts as missing: an ID should never contain them
+  parts <- lapply(cols, \(c) replace(d[[c]], d[[c]] %in% MISSING_TOKENS, NA))
+  incomplete <- Reduce(`|`, lapply(parts, is.na))
+  id <- do.call(paste, c(parts, sep = sep))
+  id[incomplete] <- NA          # treated like any blank name further down
+  
+  d[[label]] <- id
+  s$shared$datapoint_name <- label
+  list(s = s, d = d, desc = glue("{label} ({paste(cols, collapse = ' + ')})"))
+}
+
 read_datatype <- function(dir, plots) {
   yml_path <- path(dir, "schema.yml")
   if (!file_exists(yml_path)) { err(dir, "no schema.yml"); return(NULL) }
@@ -292,8 +334,17 @@ read_datatype <- function(dir, plots) {
   d <- read_csv_folder(dir, s$files %||% "*.csv")
   if (is.null(d)) { warn(dir, "no CSV files yet; data type skipped"); return(NULL) }
 
+  d <- read_csv_folder(dir, s$files %||% "*.csv")
+  if (is.null(d)) { warn(dir, "no CSV files yet; data type skipped"); return(NULL) }
+  
+  # -- multi-column datapoint names
+  composed <- compose_datapoint_name(s, d, yml_path)
+  s <- composed$s
+  d <- composed$d
+  
   # -- shared mapping
   smap <- check_mapping(s$shared, SHARED_KEYS, d, yml_path, "shared")
+  
   for (k in c("datapoint_name", "date", "project_id")) {
     if (!k %in% names(smap)) err(yml_path, glue("shared: `{k}` is required (and must match a CSV column)"))
   }
@@ -312,6 +363,7 @@ read_datatype <- function(dir, plots) {
 
   # -- datapoint names
   nm <- smap[["datapoint_name"]]
+  if (!is.null(composed$desc)) nm <- composed$desc   # messages name the parts
   unique_names <- s$unique_names %||% TRUE
   if (!is.logical(unique_names) || length(unique_names) != 1) {
     err(yml_path, "`unique_names` must be true or false")
