@@ -9,7 +9,8 @@ metadata-files:
   - _generated/navbar.yml
 
 website:
-  title: "DataPortal"
+  title: "James Lab Data Portal"
+  search: false
 
 format:
   html:
@@ -19,5 +20,5 @@ format:
     css: styles.css
     toc: true
 
-editor: visual
+editor: source
 

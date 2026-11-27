@@ -701,17 +701,36 @@ datatype_meta <- function(x) {
 
 write_navbar <- function(projects, datatypes) {
   item <- function(text, href) list(text = text, href = href)
+
+  # Extra links from data/navbar.yml (optional)
+  extra_path <- path(DATA_DIR, "navbar.yml")
+  extra <- if (file_exists(extra_path)) read_yml(extra_path) %||% list() else list()
+  check_link <- function(it, where) {
+    if (!is.null(it$menu)) { walk(it$menu, check_link, where = where); return(invisible()) }
+    if (is.null(it$href)) err(extra_path, glue("{where}: a link has no `href`"))
+    if (is.null(it$text) && is.null(it$icon)) err(extra_path, glue("{where}: link {it$href %||% ''} needs `text` or `icon`"))
+  }
+  for (side in c("left", "right")) walk(extra[[side]] %||% list(), check_link, where = side)
+
   proj_menu <- c(list(item("All projects", "projects/index.qmd")),
                  unname(map(projects, \(p) item(p$schema$name %||% p$id, paste0("projects/", p$id, ".qmd")))))
   dt_menu   <- c(list(item("All data types", "datatypes/index.qmd")),
                  unname(map(datatypes, \(x) item(x$schema$name %||% x$id, paste0("datatypes/", x$id, ".qmd")))))
-  nav <- list(website = list(navbar = list(left = list(
-    item("Home", "index.qmd"),
-    list(text = "Projects", menu = proj_menu),
-    list(text = "Data types", menu = dt_menu),
-    item("About", "about.qmd")
-  ))))
-  write_yaml(nav, path(OUT_DIR, "navbar.yml"))
+  settings <- extra[setdiff(names(extra), c("left", "right"))]   # title, logo, logo-href, background, ...
+
+  nav <- list(website = list(navbar = compact(c(settings, list(
+    left = c(
+        unname(extra$left %||% list()),
+      list(
+      item("Data portal home", "index.qmd"),
+      list(text = "Projects", menu = proj_menu),
+      list(text = "Data types", menu = dt_menu)
+    )),
+    right = if (length(extra$right)) unname(extra$right)
+  )))))
+
+    write_yaml(nav, path(OUT_DIR, "navbar.yml"),
+             handlers = list(logical = yaml::verbatim_logical))
 }
 
 # Fill _templates/*.qmd with {{id}} and {{name}}; skipped until the templates exist
